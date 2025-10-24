@@ -160,12 +160,12 @@ class GoveeAPI:
         await self._preparePacket(LedPacketCmd.POWER, [0x1 if state else 0x0])
         await self.requestStateBuffered()
     
-    async def setBrightnessBuffered(self, brightness: int):
+    async def setBrightnessBuffered(self, brightness: int, *, force: bool = False):
         """ adds the brightness to the transmit buffer """
         if brightness is None:
             return None
         brightness = int(max(0, min(255, brightness)))
-        if self.brightness == brightness:
+        if not force and self.brightness == brightness:
             return None #nothing to do
         device_max = 100 if self._segmented else 254
         payload = int(
@@ -175,12 +175,23 @@ class GoveeAPI:
         await self._preparePacket(LedPacketCmd.BRIGHTNESS, [payload])
         await self.requestBrightnessBuffered()
         
-    async def setColorBuffered(self, red: int, green: int, blue: int):
+    async def setColorBuffered(self, red: int, green: int, blue: int, *, force: bool = False):
         """ adds the color to the transmit buffer """
-        if self.color == (red, green, blue):
+        if not force and self.color == (red, green, blue):
             return None #nothing to do
         if self._segmented:
-            await self._preparePacket(LedPacketCmd.COLOR, [LedColorType.SEGMENTS, 0x01, red, green, blue, 0, 0, 0, 0, 0, 0xff, 0xff])
+            segment_payload = [
+                LedColorType.SEGMENTS,
+                0x01,  # first segment
+                red,
+                green,
+                blue,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF  # ensure segments stay lit
+            ]
+            await self._preparePacket(LedPacketCmd.COLOR, segment_payload)
+            # also push legacy single-color payloads for broader compatibility
+            await self._preparePacket(LedPacketCmd.COLOR, [LedColorType.SINGLE, red, green, blue])
+            await self._preparePacket(LedPacketCmd.COLOR, [LedColorType.LEGACY, red, green, blue])
         else:
             #legacy devices
             await self._preparePacket(LedPacketCmd.COLOR, [LedColorType.SINGLE, red, green, blue])

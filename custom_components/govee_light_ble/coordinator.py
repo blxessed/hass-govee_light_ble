@@ -80,11 +80,11 @@ class GoveeCoordinator(DataUpdateCoordinator):
     async def setStateBuffered(self, state: bool):
         await self._api.setStateBuffered(state)
 
-    async def setBrightnessBuffered(self, brightness: int):
-        await self._api.setBrightnessBuffered(brightness)
+    async def setBrightnessBuffered(self, brightness: int, force: bool = False):
+        await self._api.setBrightnessBuffered(brightness, force=force)
 
-    async def setColorBuffered(self, red: int, green: int, blue: int):
-        await self._api.setColorBuffered(red, green, blue)
+    async def setColorBuffered(self, red: int, green: int, blue: int, force: bool = False):
+        await self._api.setColorBuffered(red, green, blue, force=force)
 
     async def sendPacketBuffer(self):
         await self._api.sendPacketBuffer()

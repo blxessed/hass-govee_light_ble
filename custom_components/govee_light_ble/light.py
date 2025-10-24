@@ -71,13 +71,19 @@ class GoveeBluetoothLight(CoordinatorEntity, LightEntity):
         """Turn device on."""
         await self.coordinator.setStateBuffered(True)
 
-        if ATTR_BRIGHTNESS in kwargs:
-            brightness = int(kwargs.get(ATTR_BRIGHTNESS))
-            await self.coordinator.setBrightnessBuffered(brightness)
+        was_off = not self.is_on
+
+        brightness: int | None = kwargs.get(ATTR_BRIGHTNESS)
+        force_brightness = ATTR_BRIGHTNESS not in kwargs or was_off
+        if brightness is None:
+            # Use the last known brightness or fall back to full brightness so the strip lights up.
+            current = self.brightness
+            brightness = current if current not in (None, 0) else 255
+        await self.coordinator.setBrightnessBuffered(int(brightness), force=force_brightness)
 
         if ATTR_RGB_COLOR in kwargs:
             red, green, blue = kwargs.get(ATTR_RGB_COLOR)
-            await self.coordinator.setColorBuffered(red, green, blue)
+            await self.coordinator.setColorBuffered(red, green, blue, force=True)
         
         await self.coordinator.sendPacketBuffer()
 
