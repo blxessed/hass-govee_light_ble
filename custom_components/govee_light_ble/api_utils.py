@@ -41,7 +41,13 @@ class GoveeUtils:
         #pad cmd to 8 bits
         cmd = packet.cmd & 0xFF
         #combine segments
-        frame = bytes([packet.head, cmd]) + bytes(packet.payload)
+        if isinstance(packet.payload, (bytes, bytearray)):
+            payload_bytes = bytes(packet.payload)
+        else:
+            payload_bytes = bytes(
+                int(max(0, min(255, round(value)))) for value in packet.payload
+            )
+        frame = bytes([packet.head, cmd]) + payload_bytes
         #pad frame data to 19 bytes (plus checksum)
         frame += bytes([0] * (19 - len(frame)))
         #add checksum to end
