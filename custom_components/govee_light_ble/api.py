@@ -38,6 +38,9 @@ class GoveeAPI:
         self._packet_buffer = []
         self._client = None
         self._update_callback = update_callback
+        self._connect_lock = asyncio.Lock()
+        self._send_lock = asyncio.Lock()
+        self._buffer_lock = asyncio.Lock()
 
     @property
     def address(self):
@@ -45,9 +48,12 @@ class GoveeAPI:
 
     async def _ensureConnected(self):
         """ connects to a bluetooth device """
-        if self._client != None and self._client.is_connected:
+        if self._client is not None and self._client.is_connected:
             return None
-        await self._connect()
+        async with self._connect_lock:
+            if self._client is not None and self._client.is_connected:
+                return None
+            await self._connect()
     
     async def _connect(self):
         self._client = await bleak_retry_connector.establish_connection(BleakClient, self._ble_device, self.address)
@@ -101,11 +107,11 @@ class GoveeAPI:
 
     async def _preparePacket(self, cmd: LedPacketCmd, payload: bytes | list = b'', request: bool = False, repeat: int = 3):
         """ add data to transmission buffer """
-        #request data or perform a change
         head = LedPacketHead.REQUEST if request else LedPacketHead.COMMAND
         packet = LedPacket(head, cmd, payload)
-        for index in range(repeat):
-            self._packet_buffer.append(packet)
+        async with self._buffer_lock:
+            for _ in range(repeat):
+                self._packet_buffer.append(packet)
 
     async def _clearPacketBuffer(self):
         """ clears the packet buffer """
@@ -113,14 +119,21 @@ class GoveeAPI:
 
     async def sendPacketBuffer(self):
         """ transmits all buffered data """
-        if not self._packet_buffer:
-            #nothing to do
-            return None
-        await self._ensureConnected()
-        for packet in self._packet_buffer:
-            await self._transmitPacket(packet)
-        await self._clearPacketBuffer()
-        #not disconnecting seems to improve connection speed
+        async with self._send_lock:
+            async with self._buffer_lock:
+                if not self._packet_buffer:
+                    return None
+                packets = self._packet_buffer
+                self._packet_buffer = []
+            try:
+                await self._ensureConnected()
+                for packet in packets:
+                    await self._transmitPacket(packet)
+            except Exception:
+                async with self._buffer_lock:
+                    self._packet_buffer = packets + self._packet_buffer
+                raise
+            #not disconnecting seems to improve connection speed
 
     async def requestStateBuffered(self):
         """ adds a request for the current power state to the transmit buffer """
