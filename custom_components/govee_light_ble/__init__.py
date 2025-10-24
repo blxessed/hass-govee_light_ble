@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from enum import IntEnum
 from dataclasses import dataclass
+from typing import Callable
+
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import Platform, CONF_ADDRESS, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .coordinator import GoveeCoordinator
 from .const import DOMAIN
@@ -22,7 +23,7 @@ class RuntimeData:
     """Class to hold your data."""
 
     coordinator: DataUpdateCoordinator
-    cancel_update_listener: Callable
+    cancel_update_listener: Callable[[], None]
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Integration from a config entry."""

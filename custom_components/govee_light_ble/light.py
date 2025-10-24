@@ -5,18 +5,10 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components.light import (ColorMode, LightEntity, ATTR_BRIGHTNESS, ATTR_RGB_COLOR)
-from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import GoveeAPI
 from .const import DOMAIN
 from .coordinator import GoveeCoordinator
-
-import logging
-_LOGGER = logging.getLogger(__name__)
-
-def num_to_range(num, inMin, inMax, outMin, outMax):
-    return outMin + (float(num - inMin) / float(inMax - inMin) * (outMax - outMin))
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -38,6 +30,7 @@ class GoveeBluetoothLight(CoordinatorEntity, LightEntity):
 
     _attr_supported_color_modes = {ColorMode.RGB}
     _attr_color_mode = ColorMode.RGB
+    _attr_should_poll = False
 
     def __init__(self, coordinator: GoveeCoordinator):
         """Initialize."""
@@ -58,27 +51,29 @@ class GoveeBluetoothLight(CoordinatorEntity, LightEntity):
 
     @property
     def brightness(self):
-        """Return the current brightness. 1-255"""
-        return self.coordinator.data.brightness
+        """Return the current brightness (0-255)."""
+        data = self.coordinator.data
+        return data.brightness if data else None
 
     @property
     def is_on(self) -> bool | None:
         """Return true if light is on."""
-        return self.coordinator.data.state
+        data = self.coordinator.data
+        return data.state if data else None
 
     @property
-    def rgb_color(self) -> bool | None:
-        """Return the current rgw color."""
-        return self.coordinator.data.color
+    def rgb_color(self) -> tuple[int, int, int] | None:
+        """Return the current RGB color."""
+        data = self.coordinator.data
+        return data.color if data else None
 
     async def async_turn_on(self, **kwargs):
         """Turn device on."""
         await self.coordinator.setStateBuffered(True)
 
         if ATTR_BRIGHTNESS in kwargs:
-            brightness = kwargs.get(ATTR_BRIGHTNESS, 255) #1-255
-            brightness_mapped = num_to_range(brightness, 1, 255, 0, 255) #mapping from 1-255 to 0-255
-            await self.coordinator.setBrightnessBuffered(brightness_mapped)
+            brightness = int(kwargs.get(ATTR_BRIGHTNESS))
+            await self.coordinator.setBrightnessBuffered(brightness)
 
         if ATTR_RGB_COLOR in kwargs:
             red, green, blue = kwargs.get(ATTR_RGB_COLOR)

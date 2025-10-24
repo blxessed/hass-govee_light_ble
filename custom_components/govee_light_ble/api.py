@@ -17,6 +17,15 @@ from .api_utils import (
 import logging
 _LOGGER = logging.getLogger(__name__)
 
+
+def _scale_value(value: float, in_min: float, in_max: float, out_min: float, out_max: float) -> float:
+    """Scale value from one range to another while clamping to input bounds."""
+    if in_max == in_min:
+        return out_min
+    value = max(min(value, in_max), in_min)
+    ratio = (value - in_min) / (in_max - in_min)
+    return out_min + ratio * (out_max - out_min)
+
 class GoveeAPI:
     state: bool | None = None
     brightness: int | None = None
@@ -57,8 +66,13 @@ class GoveeAPI:
             case LedPacketCmd.POWER:
                 self.state = packet.payload[0] == 0x01
             case LedPacketCmd.BRIGHTNESS:
-                #segmented devices 0-100
-                self.brightness = packet.payload[0] / 100 * 255 if self._segmented else packet.payload[0]
+                reported = packet.payload[0]
+                if self._segmented:
+                    scaled = _scale_value(reported, 0, 100, 0, 255)
+                else:
+                    # Legacy devices report 0-254; clamp to avoid leaking out of HA range
+                    scaled = _scale_value(reported, 0, 254, 0, 255)
+                self.brightness = int(round(max(0, min(255, scaled))))
             case LedPacketCmd.COLOR:
                 red = packet.payload[1]
                 green = packet.payload[2]
@@ -135,13 +149,16 @@ class GoveeAPI:
     
     async def setBrightnessBuffered(self, brightness: int):
         """ adds the brightness to the transmit buffer """
+        if brightness is None:
+            return None
+        brightness = int(max(0, min(255, brightness)))
         if self.brightness == brightness:
             return None #nothing to do
-        #legacy devices 0-255
-        payload = round(brightness)
-        if self._segmented:
-            #segmented devices 0-100
-            payload = round(brightness / 255 * 100)
+        device_max = 100 if self._segmented else 254
+        payload = int(
+            round(_scale_value(brightness, 0, 255, 0, device_max))
+        )
+        payload = max(0, min(device_max, payload))
         await self._preparePacket(LedPacketCmd.BRIGHTNESS, [payload])
         await self.requestBrightnessBuffered()
         
